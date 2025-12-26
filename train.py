@@ -62,6 +62,9 @@ if __name__ == "__main__":
     # educated guess - could be slightly higher or lower
     min_inference_size = max(1, int(round(n_proc * 0.9)))
 
+    TICK_SKIP = 8
+    STEP_TIME = TICK_SKIP / 120
+
     latest_checkpoint_dir = "data/checkpoints/rlgym-ppo-run/" + str(max(os.listdir("data/checkpoints/rlgym-ppo-run"), key=lambda d: int(d)))
 
 
@@ -86,6 +89,7 @@ if __name__ == "__main__":
                       log_to_wandb=True, # Set this to True if you want to use Weights & Biases for logging.
                       add_unix_timestamp=False,
                       checkpoint_load_folder=latest_checkpoint_dir,
-                      render=True
+                      render=True,
+                      render_delay = STEP_TIME / 4
                       ) 
     learner.learn()
