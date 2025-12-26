@@ -1,0 +1,5 @@
+/.cursor
+/.venv
+/data
+/wandb
+/__pycache__
