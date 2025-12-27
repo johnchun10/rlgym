@@ -37,6 +37,34 @@ class InAirReward(RewardFunction[AgentID, GameState, float]):
                     is_truncated: Dict[AgentID, bool], shared_info: Dict[str, Any]) -> Dict[AgentID, float]:
         return {agent: float(not state.cars[agent].on_ground) for agent in agents}
 
+class FaceBallReward(RewardFunction[AgentID, GameState, float]):
+    """Rewards the agent for facing the ball"""
+
+    def reset(self, agents: List[AgentID], initial_state: GameState, shared_info: Dict[str, Any]) -> None:
+        pass
+
+    def get_rewards(self, agents: List[AgentID], state: GameState, is_terminated: Dict[AgentID, bool], 
+                    is_truncated: Dict[AgentID, bool], shared_info: Dict[str, Any]) -> Dict[AgentID, float]:
+        rewards = {}
+        for agent in agents:
+            car = state.cars[agent]
+
+            car_phys = car.physics if car.is_orange else car.inverted_physics
+            ball_phys = state.ball if car.is_orange else state.inverted_ball
+
+            pos_diff = ball_phys.position - car_phys.position
+            norm = np.linalg.norm(pos_diff)
+            
+            if norm < 1e-5: # Avoid div by zero
+                rewards[agent] = 0.0
+                continue
+                
+            dir_to_ball = pos_diff / norm
+            face_reward = np.dot(car_phys.forward, dir_to_ball)
+            rewards[agent] = float(face_reward)
+            
+        return rewards
+
 class VelocityBallToGoalReward(RewardFunction[AgentID, GameState, float]):
     """Rewards the agent for hitting the ball toward the opponent's goal"""
     
@@ -59,6 +87,6 @@ class VelocityBallToGoalReward(RewardFunction[AgentID, GameState, float]):
             dist = np.linalg.norm(pos_diff) # distance to opponent's goal
             dir_to_goal = pos_diff / dist # unit vector to opponent's goal; direction only (no magnitude)
             
-            vel_toward_goal = np.dot(ball_vel, dir_to_goal) # velocity component toward opponent's goal
-            rewards[agent] = max(vel_toward_goal / common_values.BALL_MAX_SPEED, 0)
+            vel_toward_goal = np.dot(ball_vel, dir_to_goal)
+            rewards[agent] = vel_toward_goal / common_values.BALL_MAX_SPEED
         return rewards

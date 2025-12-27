@@ -4,8 +4,8 @@ def build_rlgym_v2_env():
     from rlgym.rocket_league.action_parsers import LookupTableAction, RepeatAction
     from rlgym.rocket_league.done_conditions import GoalCondition, NoTouchTimeoutCondition, TimeoutCondition, AnyCondition
     from rlgym.rocket_league.obs_builders import DefaultObs
-    from rlgym.rocket_league.reward_functions import CombinedReward, GoalReward
-    from rewards import SpeedTowardBallReward, InAirReward, VelocityBallToGoalReward
+    from rlgym.rocket_league.reward_functions import CombinedReward, GoalReward, TouchReward
+    from rewards import SpeedTowardBallReward, InAirReward, VelocityBallToGoalReward, FaceBallReward
     from rlgym.rocket_league.sim import RocketSimEngine
     from rlgym.rocket_league.state_mutators import MutatorSequence, FixedTeamSizeMutator, KickoffMutator
     from rlgym.rocket_league import common_values
@@ -26,7 +26,27 @@ def build_rlgym_v2_env():
     termination_condition = GoalCondition()
     truncation_condition = AnyCondition(NoTouchTimeoutCondition(timeout_seconds=no_touch_timeout_seconds), TimeoutCondition(timeout_seconds=game_timeout_seconds))
 
-    reward_fn = CombinedReward((GoalReward(), 10), (VelocityBallToGoalReward(), 1), (SpeedTowardBallReward(), 0.5), (InAirReward(), 0.005))
+    # STAGE 1: Early Rewards
+    # Focus: Learn to touch ball, move to ball, jump, face ball
+    reward_early = CombinedReward(
+        (TouchReward(), 50.0),            # Huge reward for touching ball
+        (SpeedTowardBallReward(), 5.0),   # Strong guidance to find ball
+        (FaceBallReward(), 1.0),          # Encouragement to face ball
+        (InAirReward(), 0.15)             # Small bonus to keep jumping alive
+    )
+
+    # STAGE 2: Learning to Score
+    # Focus: Scoring, hitting towards goal
+    reward_mid = CombinedReward(
+        (GoalReward(), 10.0),
+        (VelocityBallToGoalReward(), 1.0), # Main driving force
+        (SpeedTowardBallReward(), 0.1),    # Reduced assistance
+        (TouchReward(), 0.1),              # Reduced touch spam
+        (InAirReward(), 0.01)
+    )
+
+    # SELECT CURRENT STAGE HERE
+    reward_fn = reward_early
 
     obs_builder = DefaultObs(zero_padding=None,
                              pos_coef=np.asarray([1 / common_values.SIDE_WALL_X, 1 / common_values.BACK_NET_Y, 1 / common_values.CEILING_Z]),
@@ -57,7 +77,7 @@ if __name__ == "__main__":
     from rlgym_ppo import Learner
     import os
 
-    n_proc = 36
+    n_proc = 32
 
     # educated guess - could be slightly higher or lower
     min_inference_size = max(1, int(round(n_proc * 0.9)))
@@ -88,8 +108,8 @@ if __name__ == "__main__":
                       timestep_limit=1_000_000_000,  # Train for 1B steps
                       log_to_wandb=True, # Set this to True if you want to use Weights & Biases for logging.
                       add_unix_timestamp=False,
-                      checkpoint_load_folder=latest_checkpoint_dir,
+                      checkpoint_load_folder=None, # Use latest_checkpoint_dir for saving runs
                       render=True,
-                      render_delay = STEP_TIME / 4
+                      render_delay = STEP_TIME / 8
                       ) 
     learner.learn()
